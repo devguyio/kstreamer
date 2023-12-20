@@ -18,10 +18,11 @@ package server
 
 import (
 	"log/slog"
-	"net"
 	"os"
 	"strconv"
 	"testing"
+
+	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 )
 
 const (
@@ -43,20 +44,54 @@ func TestMain(m *testing.M) {
 	m.Run()
 }
 
-func TestNewTCPServer(t *testing.T) {
-	conn, err := net.Dial("tcp", TEST_ADDRESS+":"+strconv.Itoa(TEST_PORT))
-	if err != nil {
-		t.Fatalf("Failed to connect to TCP server: %s", err)
+//func TestNewTCPServer(t *testing.T) {
+//	conn, err := net.Dial("tcp", TEST_ADDRESS+":"+strconv.Itoa(TEST_PORT))
+//	if err != nil {
+//		t.Fatalf("Failed to connect to TCP server: %s", err)
+//	}
+//
+//	buf := []byte("Hello world")
+//	n, err := conn.Write(buf)
+//	if err != nil {
+//		t.Fatalf("Failed to write to TCP server: %s", err)
+//	}
+//	if n != len(buf) {
+//		t.Fatalf("Failed to write all bytes to TCP server: wrote %d bytes, expected %d", n, len(buf))
+//	}
+//
+//	defer conn.Close()
+//}
+
+func TestReadKafkaMessage(t *testing.T) {
+	config := &kafka.ConfigMap{
+		"bootstrap.servers": TEST_ADDRESS + ":" + strconv.Itoa(TEST_PORT),
+		"client.id":         "go-producer",
 	}
 
-	buf := []byte("Hello world")
-	n, err := conn.Write(buf)
+	producer, err := kafka.NewProducer(config)
 	if err != nil {
-		t.Fatalf("Failed to write to TCP server: %s", err)
+		t.Fatalf("Failed to create Kafka producer: %s", err)
 	}
-	if n != len(buf) {
-		t.Fatalf("Failed to write all bytes to TCP server: wrote %d bytes, expected %d", n, len(buf))
+	defer producer.Close()
+
+	topic := "test"
+	message := "Hello world"
+
+	deliveryChan := make(chan kafka.Event)
+
+	err = producer.Produce(&kafka.Message{
+		TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny},
+		Value:          []byte(message),
+	}, deliveryChan)
+
+	if err != nil {
+		t.Fatalf("Failed to produce message: %s", err)
 	}
 
-	defer conn.Close()
+	e := <-deliveryChan
+	m := e.(*kafka.Message)
+
+	if m.TopicPartition.Error != nil {
+		t.Fatalf("Delivery failed: %s", m.TopicPartition.Error)
+	}
 }
