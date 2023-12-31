@@ -17,6 +17,9 @@ limitations under the License.
 package server
 
 import (
+	"bytes"
+	"encoding/binary"
+	"io"
 	"log/slog"
 	"net"
 	"strconv"
@@ -81,11 +84,65 @@ func (s *TCPServer) Stop() error {
 func (s *TCPServer) handleConnection(conn net.Conn) {
 	defer conn.Close()
 	slog.Debug("Handling TCP connection", "address", conn.RemoteAddr())
-	buf := make([]byte, 1024)
-	n, err := conn.Read(buf)
-	slog.Debug("Received data from TCP connection", "read bytes", n, "data", string(buf[:n]))
+	sizeBuf := make([]byte, 4)
+	n, err := conn.Read(sizeBuf)
+	size := binary.BigEndian.Uint32(sizeBuf)
+	slog.Debug("Received data from TCP connection", "read bytes", n, "size", size)
+
+	message := make([]byte, size)
+	n, err = conn.Read(message)
+	//req := &sarama.Request{}
+	//req.decode(&sarama.RealDecoder{Raw: message})
+	//slog.Debug("Received data from TCP connection", "read bytes", n, "correlation id", req.CorrelationID, "client id", req.ClientID, "api key", req.Body.key(), "api version", req.Body.version(), "body", req.Body)
+
+	//res := &sarama.ApiVersionsResponse{
+	//	Version: 2,
+	//}
+
 	if err != nil {
 		slog.Error("Failed to read from TCP connection: %s", err)
 		return
 	}
+}
+
+func getCompactString(m []byte) string {
+	// Create a reader from the data slice.
+	reader := bytes.NewReader(m)
+
+	// Read the VARINT value.
+	value, _ := ReadVarint(reader)
+	slog.Debug("Read compact string", "value", value)
+	//
+	//length, n := binary.Uvarint(message)
+	//s := string(message[n : n+int(length)])
+	//slog.Debug("Read compact string", "length", length, "string", s)
+	return ""
+}
+
+func ReadVarint(r io.Reader) (int32, error) {
+	var result int32
+	var shift uint
+
+	for {
+		// Read one byte at a time.
+		b := make([]byte, 1)
+		_, err := r.Read(b)
+		if err != nil {
+			return 0, err
+		}
+
+		// Extract the lower 7 bits from the byte and add to the result.
+		value := int32(b[0] & 0x7F)
+		result |= value << shift
+
+		// Check if the high bit (8th bit) is set, indicating more bytes to read.
+		if b[0]&0x80 == 0 {
+			break
+		}
+
+		shift += 7
+	}
+
+	// Zig-zag decoding: Shift right by one to undo the zig-zag encoding.
+	return (result >> 1) ^ -(result & 1), nil
 }
