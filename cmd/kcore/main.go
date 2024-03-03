@@ -63,9 +63,7 @@ func main() {
 	s := server.NewTCPServer(
 		address, port, func() server.ConnectionHandler {
 			return kafka.NewKafkaConnectionHandler(
-				[]kafka.RequestHandler{
-					kafka.NewMetadataManager(),
-				},
+				kafka.NewKafkaApi(),
 			)
 		},
 	)

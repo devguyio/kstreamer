@@ -73,6 +73,7 @@ func (s *TCPServer) Start() error {
 				slog.Error("Failed to accept TCP connection", err)
 				return
 			}
+			slog.Debug("Accepted new TCP connection", "remote address", conn.RemoteAddr())
 			// TODO: Limit the number of concurrent connections
 			go s.handlerFactory().HandleConnection(conn)
 		}
