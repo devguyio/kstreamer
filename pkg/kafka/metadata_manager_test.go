@@ -1,5 +1,5 @@
 /*
-Copyright 2023 KStreamer Authors
+Copyright 2024 KCore Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/k-streamer/sarama"
+	"github.com/kcore-io/sarama"
 )
 
 type MockConnection struct {
@@ -90,8 +90,8 @@ func (m *MockConnection) WithRequest(request sarama.Request) *MockConnection {
 	return m
 }
 
-func (m *MockConnection) ReadResponseHeader() (*sarama.ResponseHeaderStruct, error) {
-	header := &sarama.ResponseHeaderStruct{}
+func (m *MockConnection) ReadResponseHeader() (*sarama.Response, error) {
+	header := &sarama.Response{}
 
 	if len(m.in) == 0 {
 		return nil, nil

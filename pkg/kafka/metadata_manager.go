@@ -19,7 +19,7 @@ package kafka
 import (
 	"log/slog"
 
-	"github.com/k-streamer/sarama"
+	"github.com/kcore-io/sarama"
 )
 
 const ApiVersionsApiKey = 18
