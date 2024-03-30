@@ -14,12 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package kafka
+package api
 
 // TODO: Add support for multiple versions
 const (
+	ProduceApiKey     = 0
+	MetadataApiKey    = 3
 	ApiVersionsApiKey = 18
 
+	ResponseHeaderVersion     = 1
+	ProduceRequestVersion     = 7
+	MetadataRequestVersion    = 9
 	ApiVersionsRequestVersion = 3
-	ResponseHeaderVersion     = 0
 )

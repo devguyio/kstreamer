@@ -48,7 +48,7 @@ func (h *MockConnectionHandler) HandleConnection(conn net.Conn) {
 		buf := make([]byte, MESSAGE_SIZE)
 		n, err := conn.Read(buf)
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				slog.Debug("EOF reached, no more data to read from connection")
 				return
 			}

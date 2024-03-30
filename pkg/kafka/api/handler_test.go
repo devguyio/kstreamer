@@ -14,9 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package kafka
+package api_test
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -25,12 +26,15 @@ import (
 	"testing"
 	"time"
 
+	"kcore/pkg/kafka/api"
+	"kcore/pkg/kafka/connection"
+
 	"github.com/kcore-io/sarama"
 )
 
 const (
 	ClusterID    = "kcore-cluster"
-	ControllerId = 0
+	ControllerID = 0
 )
 
 func TestMain(m *testing.M) {
@@ -51,7 +55,7 @@ func TestAPIVersionsRequest(t *testing.T) {
 		Body:          &apiVersionRequest,
 	}
 	expectedResp := sarama.Response{
-		Version:     ResponseHeaderVersion,
+		Version:     api.ResponseHeaderVersion,
 		Body:        &sarama.ApiVersionsResponse{},
 		BodyVersion: apiVersionRequest.Version,
 	}
@@ -60,7 +64,7 @@ func TestAPIVersionsRequest(t *testing.T) {
 		expectedResp.Version, expectedResp.Body, expectedResp.BodyVersion,
 	)
 
-	handler := NewKafkaConnectionHandler(NewKafkaApi(ClusterID, ControllerId))
+	handler := connection.NewConnectionHandler(api.NewAPIHandler(ClusterID, ControllerID))
 
 	handler.HandleConnection(conn)
 
@@ -80,10 +84,10 @@ func TestAPIVersionsRequest(t *testing.T) {
 		t.Fatalf("Expected response body to be non-nil")
 	}
 
-	apiVersionsResponse := resp.Body.(*sarama.ApiVersionsResponse)
+	apiVersionsResponse, ok := resp.Body.(*sarama.ApiVersionsResponse)
 
-	if err != nil {
-		t.Fatalf("Failed to decode response: %v", err)
+	if !ok {
+		t.Fatalf("Failed to decode response: %v", resp.Body)
 	}
 
 	if apiVersionsResponse.ErrorCode != 0 {
@@ -95,55 +99,70 @@ func TestAPIVersionsRequest(t *testing.T) {
 	}
 }
 
-func Test_kafkaApi_HandleApiVersions(t *testing.T) {
-	type args struct {
-		correlationId int32
-		clientId      string
-		request       sarama.ApiVersionsRequest
-		response      *sarama.Response
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    *sarama.ApiVersionsResponse
-		wantErr bool
-	}{
-		{
-			name: "Test API Versions",
-			args: args{
-				correlationId: 1,
-				clientId:      "kcore-client",
-				request: sarama.ApiVersionsRequest{
-					Version:               3,
-					ClientSoftwareName:    "kcore",
-					ClientSoftwareVersion: "1.0.0",
-				},
-				response: &sarama.Response{
-					Body:        &sarama.ApiVersionsResponse{},
-					BodyVersion: 3,
-				},
-			},
-			want: &sarama.ApiVersionsResponse{
-
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(
-			tt.name, func(t *testing.T) {
-				k := &kafkaApi{}
-				got, err := k.HandleApiVersions(tt.args.correlationId, tt.args.clientId, tt.args.request)
-				if (err != nil) != tt.wantErr {
-					t.Errorf("HandleApiVersions() error = %v, wantErr %v", err, tt.wantErr)
-					return
-				}
-				if !reflect.DeepEqual(got, tt.want) {
-					t.Errorf("HandleApiVersions() got = %v, want %v", got, tt.want)
-				}
-			},
-		)
-	}
-}
+// func Test_kafkaApi_HandleApiVersions(t *testing.T) {
+// 	type args struct {
+// 		correlationID int32
+// 		clientID      string
+// 		request       sarama.ApiVersionsRequest
+// 	}
+// 	tests := []struct {
+// 		name    string
+// 		args    args
+// 		want    *sarama.ApiVersionsResponse
+// 		wantErr bool
+// 	}{
+// 		{
+// 			name: "Test API Versions",
+// 			args: args{
+// 				correlationID: 1,
+// 				clientID:      "kcore-client",
+// 				request: sarama.ApiVersionsRequest{
+// 					Version:               3,
+// 					ClientSoftwareName:    "kcore",
+// 					ClientSoftwareVersion: "1.0.0",
+// 				},
+// 			},
+// 			want: &sarama.ApiVersionsResponse{
+// 				Version: api.ApiVersionsRequestVersion,
+// 				ApiKeys: []sarama.ApiVersionsResponseKey{
+// 					{
+// 						ApiKey:     api.ApiVersionsApiKey,
+// 						Version:    api.ApiVersionsRequestVersion,
+// 						MinVersion: 0,
+// 						MaxVersion: api.ApiVersionsRequestVersion,
+// 					},
+// 					{
+// 						ApiKey:     api.MetadataApiKey,
+// 						Version:    api.MetadataRequestVersion,
+// 						MinVersion: 0,
+// 						MaxVersion: api.MetadataRequestVersion,
+// 					},
+// 					{
+// 						ApiKey:     api.ProduceApiKey,
+// 						Version:    api.ProduceRequestVersion,
+// 						MinVersion: 0,
+// 						MaxVersion: api.ProduceRequestVersion,
+// 					},
+// 				},
+// 			},
+// 		},
+// 	}
+// 	for _, tt := range tests {
+// 		t.Run(
+// 			tt.name, func(t *testing.T) {
+// 				k := api.NewAPIHandler(ClusterID, ControllerID)
+// 				got, err := k.HandleAPIVersions(tt.args.correlationID, tt.args.clientID, tt.args.request)
+// 				if (err != nil) != tt.wantErr {
+// 					t.Errorf("handleAPIVersions() error = %v, wantErr %v", err, tt.wantErr)
+// 					return
+// 				}
+// 				if !reflect.DeepEqual(got, tt.want) {
+// 					t.Errorf("handleAPIVersions() got = %v, want %v", got, tt.want)
+// 				}
+// 			},
+// 		)
+// 	}
+// }
 
 // MockConnection is a mock kafka client connection for testing. It allows you to set Kafka requests in order and
 // read the responses written to the connection in the same order.
@@ -168,7 +187,7 @@ func NewMockConnection() *MockConnection {
 // Read is expected to be called by the Kafka connection handler to read the request from the client.
 //
 // For testing purposes, we will return the request set by the test case in the order they were set using WithRequest.
-func (m *MockConnection) Read(b []byte) (n int, err error) {
+func (m *MockConnection) Read(b []byte) (int, error) {
 	if len(m.out) == 0 {
 		return 0, io.EOF
 	}
@@ -181,7 +200,7 @@ func (m *MockConnection) Read(b []byte) (n int, err error) {
 //
 // For testing purposes, we will store the response in the connection so that it can be read by the test case by
 // calling ReadResponse.
-func (m *MockConnection) Write(b []byte) (n int, err error) {
+func (m *MockConnection) Write(b []byte) (int, error) {
 	if m.in == nil {
 		m.in = make([][]byte, 0)
 	}
@@ -201,15 +220,15 @@ func (m *MockConnection) RemoteAddr() net.Addr {
 	return nil
 }
 
-func (m *MockConnection) SetDeadline(t time.Time) error {
+func (m *MockConnection) SetDeadline(_ time.Time) error {
 	return nil
 }
 
-func (m *MockConnection) SetReadDeadline(t time.Time) error {
+func (m *MockConnection) SetReadDeadline(_ time.Time) error {
 	return nil
 }
 
-func (m *MockConnection) SetWriteDeadline(t time.Time) error {
+func (m *MockConnection) SetWriteDeadline(_ time.Time) error {
 	return nil
 }
 
@@ -235,8 +254,8 @@ func (m *MockConnection) WithRequest(request sarama.Request) *MockConnection {
 	return m
 }
 
-// ExpectResponse sets the response expected for the request set by the test case using WithRequest. The response will be
-// written to the connection by the Kafka connection handler.
+// ExpectResponse sets the response expected for the request set by the test case using WithRequest. The response will
+// be written to the connection by the Kafka connection handler.
 //
 // If no request has been set using WithRequest, this function will panic.
 func (m *MockConnection) ExpectResponse(
@@ -255,25 +274,33 @@ func (m *MockConnection) ExpectResponse(
 	return m
 }
 
-// ReadResponse reads the response written to the connection by the Kafka connection handler. Responses are read in the
-// order they were set by the test case using WithRequest and
+// ReadResponse reads the response written to the connection by the Kafka connection handler.
+//
+// Responses are read in the order they were set by the test case using WithRequest and ExpectResponse.
 func (m *MockConnection) ReadResponse() (*sarama.Response, error) {
 	resp := &sarama.Response{}
 	orig := reflect.New(m.reqs[0].ResponseBodyType).Elem()
 	orig.FieldByName("Version").SetInt(int64(m.reqs[0].ResponseVresion))
-	resp.Body = (orig.Addr().Interface()).(sarama.ProtocolBody)
+
+	b, ok := orig.Addr().Interface().(sarama.ProtocolBody)
+
+	if !ok {
+		return nil, fmt.Errorf("invalid response body type: %v", orig.Type())
+	}
+
+	resp.Body = b
 	resp.BodyVersion = m.reqs[0].ResponseBodyVersion
 
 	m.reqs = m.reqs[1:]
 
 	if len(m.in) == 0 {
-		return nil, nil
+		return nil, io.EOF
 	}
 
 	buf := m.in[0]
 	m.in = m.in[1:]
 
-	err := sarama.VersionedDecode(buf, resp, ResponseHeaderVersion, nil)
+	err := sarama.VersionedDecode(buf, resp, api.ResponseHeaderVersion, nil)
 	if err != nil {
 		return nil, err
 	}

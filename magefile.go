@@ -18,8 +18,8 @@ import (
 const (
 	binaryName = "kcore"
 
-	GotestsumUrl       = "gotest.tools/gotestsum"
-	GolangciLintUrl    = "github.com/golangci/golangci-lint/cmd/golangci-lint"
+	GotestsumUrl       = "gotest.tools/gotestsum@latest"
+	GolangciLintUrl    = "github.com/golangci/golangci-lint/cmd/golangci-lint@latest"
 	HelmUrl            = "https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3"
 	KindUrl            = "https://kind.sigs.k8s.io/dl/v0.22.0/kind-linux-amd64"
 	KindConfigFile     = "config/dev/kind-config.yaml"
@@ -37,18 +37,12 @@ var (
 
 	GreenMessage = lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#00c100"))
-	// Border(lipgloss.NormalBorder(), true, false).
-	// BorderForeground(lipgloss.Color("#00c100")).
-	// Padding(0, 10, 0, 0)
 )
 
 func mustRun(cmd string, args ...string) {
 	out := lipgloss.NewStyle().Bold(true).Render(
 		fmt.Sprintf("\n> %s %s\n", cmd, strings.Join(args, " ")),
 	)
-	// if err != nil {
-	// 	panic(err)
-	// }
 
 	fmt.Println(out)
 	if err := sh.RunV(cmd, args...); err != nil {
@@ -61,7 +55,7 @@ var Default = Check
 // Build builds the binary
 func Build() error {
 	fmt.Println("Building...")
-	return g0("build", "-o", binaryName, ".")
+	return g0("build", "-o", binaryName, "./cmd/kcore/main.go")
 }
 
 // Install installs the built binary
@@ -98,6 +92,11 @@ func checkTools() error {
 		fmt.Printf("Installing golangci-lint from %s\n", GolangciLintUrl)
 		mustRun(goexec, "install", GolangciLintUrl)
 	}
+
+	return nil
+}
+
+func checkDevEnvTools() error {
 	if _, err := exec.LookPath("helm"); err != nil {
 		fmt.Println("helm not found, installing...")
 		fmt.Printf("Downloading helm installer from %s\n", HelmUrl)
@@ -171,7 +170,6 @@ func step(message string) {
 				fmt.Sprintf("[Step] %s", message),
 			),
 	)
-	// fmt.Println("")
 }
 
 func subStep(message string) {
@@ -186,7 +184,7 @@ func subStep(message string) {
 
 // Infra deploys the infrastructure
 func Infra() error {
-	mg.Deps(checkTools)
+	mg.Deps(checkDevEnvTools)
 	// instruction("Deploying infrastructure...")
 	step(
 		fmt.Sprintf(
